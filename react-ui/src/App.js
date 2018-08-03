@@ -11,8 +11,61 @@ class App extends Component {
     };
   }
 
+  setCoordsFromLocalStorage(cachedLat, cachedLon) {
+    this.setState({
+     latitude: cachedLat,
+     longitude: cachedLon
+    }, () => {
+     this.callWeatherApi(this.state.latitude,
+                         this.state.longitude,
+                         "geo")
+     .then(res => this.setState({ response: res.express }))
+     .catch(err => console.log(err));
+    });
+   }
+
+  changeLocation(location) {
+    this.setState({
+     location: location
+    }, () => {
+     this.callWeatherApi("latitude", "longitude", this.state.location)
+     .then(res => this.setState({ response: res.express }))
+     .catch(err =>
+      this.setState({
+       errorText: "city does not exist",
+      }),
+      console.log(this.state.errorText)
+     );
+    });
+   }
+
+   getCoords() {
+    if (window.navigator.geolocation) { 
+     navigator.geolocation.getCurrentPosition((position) => {
+      localStorage.setItem('latitude', position.coords.latitude);
+      localStorage.setItem('longitude', position.coords.longitude);
+      this.callWeatherApi(position.coords.latitude,
+                          position.coords.longitude,
+                          "geo")
+      .then(res => this.setState({ response: res.express }))
+      .catch(err => console.log(err));
+    }, (error) => {
+     this.setState({
+      error: error.message,
+     });
+    });
+    } 
+   }
+
   componentDidMount() {
-    fetch('/api')
+    let cachedLat = localStorage.getItem('latitude');
+    let cachedLon = localStorage.getItem('longitude');
+
+    cachedLat ? 
+      this.setCoordsFromLocalStorage(cachedLat, cachedLon) :
+      this.getCoords();
+
+    /*fetch('/api')
       .then(response => {
         if (!response.ok) {
           throw new Error(`status ${response.status}`);
@@ -29,8 +82,39 @@ class App extends Component {
           message: `API call failed: ${e}`,
           fetching: false
         });
-      })
+      })*/
   }
+
+  callWeatherApi = async (latitude, longitude, location) => {
+  let response = await fetch('/api/weather?latitude=' + latitude + '&longitude=' + longitude + '&location=' + location);
+    let body = await response.json();
+    if (body.cod == 404) {
+      throw Error(body.message);
+    } else {
+      this.callUnsplashApi(body.name)
+      this.setState({
+      errorText: "",
+      data: body,
+      loading: false
+      })
+      return body;
+    }};
+  
+  callUnsplashApi = async (location) => {
+    let response = await fetch('/api/unsplash?location=' + location);
+    let body = await response.json();
+    
+    if (response.status !== 200) throw Error(body.message);
+    var randomPhotoNumber = Math.floor(Math.random() * 10);
+    this.setState({
+      currentCityImage: body[randomPhotoNumber].urls.regular,
+      userFirstName: body[randomPhotoNumber].user.first_name,
+      userProfileLink: body[randomPhotoNumber].user.links.html,
+      userProfileImage:
+      body[randomPhotoNumber].user.profile_image.medium
+    });
+    return body;
+    };
 
   render() {
     return (
